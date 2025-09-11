@@ -1,0 +1,20 @@
+[package]
+name = "currency"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+candid = "0.10"
+ic-ledger-types = "0.15.0"
+ic-cdk = "0.18.3"
+ic-cdk-timers = "0.12" # Feel free to remove this dependency if you don't need timers
+ic-stable-structures = "0.6.5"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_bytes = "0.11.15"
+thiserror = "1.0.63"
+num-traits = "0.2.19"
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }

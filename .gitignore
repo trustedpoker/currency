@@ -1,0 +1,12 @@
+/target
+node_modules/
+
+.DS_Store
+dist/
+*storybook.log
+
+# dfx temporary files
+.dfx/
+src/declarations
+
+.env
