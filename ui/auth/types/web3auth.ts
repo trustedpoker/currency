@@ -15,8 +15,8 @@ import { IC_HOST, IsDev } from "@zk-game-dao/ui";
 import { AuthDataProvider } from "./auth-data";
 
 const clientId = !IsDev
-  ? "BLNGdSp4e8zpui5g2VRVm9533eUVL7XughrH0PDTsOU0n3h3163HXJxstQpTHvSqaRvFMKOimvaV6cLWEnGlr88"
-  : "BK_fxc0tSnRyrjvB-vyy4LIA8wuFjHXXKjLKt5c9ZjtoZbU_5123z2vtbKQ037vfcp3189Hc6yH7HG6sYPaxJ0Q";
+  ? "BJ5MVY5dVC1SERMgJv-0jZh7cyJBmmo_4QrSKAYILLO0YE3MOBnOHD3yQ6PysFkCeq3Di7pwrEWVJiVXj0IVJZI"
+  : "BJbP2vVuQvVne9QC7GnsCnstay0grZKIWa0iAg-E7WWnMj9ua-SXnU5aEM2w7N93jsMiW4DSB4l12wlUH46EeBc";
 
 const host = IC_HOST;
 
@@ -39,9 +39,9 @@ export type SocialLoginProviderKey = (typeof SocialLoginProviders)[number];
 export type Web3AuthLoginProvider =
   | { type: SocialLoginProviderKey }
   | {
-      type: "email_passwordless";
-      email: string;
-    };
+    type: "email_passwordless";
+    email: string;
+  };
 
 export type AuthDataWeb3Auth = AuthDataProvider<
   "web3auth",
