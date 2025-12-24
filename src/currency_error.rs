@@ -70,4 +70,26 @@ pub enum CurrencyError {
 
     #[error("Operation not supported: {0}")]
     OperationNotSupported(String),
+
+    // Tron-specific errors
+    #[error("Invalid Tron address: {0}")]
+    InvalidAddress(String),
+
+    #[error("Invalid HTTP response: {0}")]
+    InvalidResponse(String),
+
+    #[error("Invalid key: {0}")]
+    InvalidKey(String),
+
+    #[error("Invalid amount: {0}")]
+    InvalidAmount(String),
+
+    #[error("Transaction verification failed: {0}")]
+    TransactionVerificationFailed(String),
+
+    #[error("Hot wallet balance insufficient")]
+    HotWalletInsufficientBalance,
+
+    #[error("Tron address not linked")]
+    TronAddressNotLinked,
 }

@@ -60,7 +60,8 @@ pub enum Currency {
     ICP,
     CKETHToken(CKTokenSymbol),
     BTC,
-    GenericICRC1(Token)
+    GenericICRC1(Token),
+    TRC20USDT,
 }
 
 impl Currency {
@@ -73,6 +74,7 @@ impl Currency {
             },
             Currency::BTC => 8,
             Currency::GenericICRC1(token) => token.decimals,
+            Currency::TRC20USDT => 6,
         }
     }
 }
@@ -84,6 +86,7 @@ impl std::fmt::Display for Currency {
             Currency::CKETHToken(ck_token) => write!(f, "{:?}", ck_token),
             Currency::BTC => write!(f, "BTC"),
             Currency::GenericICRC1(token) => write!(f, "{}", token.symbol_to_string()),
+            Currency::TRC20USDT => write!(f, "TRC20-USDT"),
         }
     }
 }
@@ -97,6 +100,7 @@ impl From<u8> for Currency {
             2 => Currency::CKETHToken(CKTokenSymbol::USDT),
             3 => Currency::CKETHToken(CKTokenSymbol::ETH),
             4 => Currency::BTC,
+            6 => Currency::TRC20USDT,
             _ => panic!("Invalid currency value"),
         }
     }
@@ -113,6 +117,7 @@ impl From<Currency> for u8 {
             },
             Currency::BTC => 4,
             Currency::GenericICRC1(_) => 5,
+            Currency::TRC20USDT => 6,
         }
     }
 }

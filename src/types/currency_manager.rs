@@ -17,7 +17,11 @@ use crate::{
     Currency,
 };
 
-use super::canister_wallets::{btc_token_wallet::CKBTCTokenWallet, icrc1_token_wallet::GenericICRC1TokenWallet};
+use super::canister_wallets::{
+    btc_token_wallet::CKBTCTokenWallet, 
+    icrc1_token_wallet::GenericICRC1TokenWallet,
+    trc20_usdt_wallet::TRC20USDTWallet,
+};
 
 const MAX_VALUE_SIZE_CURRENCY_MANAGER: u32 = 100000; // Adjust based on your needs
 
@@ -38,6 +42,7 @@ impl Storable for CurrencyManager {
                 ckerc20_tokens: vec![],
                 btc: None,
                 generic_icrc1_tokens: vec![],
+                trc20_usdt: None,
             }
         })
     }
@@ -54,6 +59,7 @@ pub struct CurrencyManager {
     pub ckerc20_tokens: Vec<CKERC20TokenWallet>,
     pub btc: Option<CKBTCTokenWallet>,
     pub generic_icrc1_tokens: Vec<GenericICRC1TokenWallet>,
+    pub trc20_usdt: Option<TRC20USDTWallet>,
 }
 
 impl CurrencyManager {
@@ -63,6 +69,7 @@ impl CurrencyManager {
             ckerc20_tokens: Vec::new(),
             btc: Some(CKBTCTokenWallet::new()),
             generic_icrc1_tokens: Vec::new(),
+            trc20_usdt: None,
         }
     }
 
@@ -98,8 +105,20 @@ impl CurrencyManager {
                     self.generic_icrc1_tokens.push(GenericICRC1TokenWallet::new(token.ledger_id).await?);
                 }
             }
+            Currency::TRC20USDT => {
+                // TRC-20 USDT wallet needs to be configured separately with hot wallet address
+                // This is a placeholder - actual setup requires hot wallet initialization
+                return Err(CurrencyError::OperationNotSupported(
+                    "TRC-20 USDT wallet must be initialized with set_trc20_wallet()".to_string()
+                ));
+            }
         }
         Ok(())
+    }
+
+    /// Set TRC-20 USDT wallet configuration
+    pub fn set_trc20_wallet(&mut self, hot_wallet_address: String, is_testnet: bool, api_key: Option<String>) {
+        self.trc20_usdt = Some(TRC20USDTWallet::new(hot_wallet_address, is_testnet, api_key));
     }
 
     pub fn remove_currency(&mut self, currency: &Currency) {
@@ -117,6 +136,9 @@ impl CurrencyManager {
             Currency::GenericICRC1(token) => {
                 self.generic_icrc1_tokens
                     .retain(|w| w.metadata.symbol != token.symbol_to_string());
+            }
+            Currency::TRC20USDT => {
+                self.trc20_usdt = None;
             }
         }
     }
@@ -161,6 +183,13 @@ impl CurrencyManager {
                     .deposit(transaction_state, from_principal, amount)
                     .await
             }
+            Currency::TRC20USDT => {
+                // TRC-20 deposits are verified via verify_trc20_deposit() method
+                // This should not be called directly for TRC-20
+                Err(CurrencyError::OperationNotSupported(
+                    "Use verify_trc20_deposit() for TRC-20 deposits".to_string()
+                ))
+            }
         }
     }
 
@@ -194,6 +223,10 @@ impl CurrencyManager {
                     .find(|w| w.metadata.symbol == token.symbol_to_string())
                     .ok_or(CurrencyError::WalletNotSet)?;
                 wallet.validate_allowance(from_principal, amount).await
+            }
+            Currency::TRC20USDT => {
+                // Not applicable for TRC-20
+                Ok(())
             }
         }
     }
@@ -229,6 +262,12 @@ impl CurrencyManager {
                     .ok_or(CurrencyError::WalletNotSet)?;
                 wallet.withdraw(wallet_principal_id, amount).await
             }
+            Currency::TRC20USDT => {
+                // TRC-20 withdrawals are handled via request_trc20_withdrawal() method
+                Err(CurrencyError::OperationNotSupported(
+                    "Use request_trc20_withdrawal() for TRC-20 withdrawals".to_string()
+                ))
+            }
         }
     }
 
@@ -263,6 +302,12 @@ impl CurrencyManager {
                     .ok_or(CurrencyError::WalletNotSet)?;
                 wallet.withdraw(wallet_principal_id, amount).await
             }
+            Currency::TRC20USDT => {
+                // TRC-20 rake withdrawals not yet supported in MVP
+                Err(CurrencyError::OperationNotSupported(
+                    "TRC-20 rake withdrawal not yet implemented".to_string()
+                ))
+            }
         }
     }
 
@@ -292,6 +337,12 @@ impl CurrencyManager {
                     .ok_or(CurrencyError::WalletNotSet)?;
                 wallet.get_balance(principal_id).await
             }
+            Currency::TRC20USDT => {
+                // Balance queries for TRC-20 are handled by game canisters
+                Err(CurrencyError::OperationNotSupported(
+                    "TRC-20 balance managed by game canister".to_string()
+                ))
+            }
         }
     }
 
@@ -320,6 +371,11 @@ impl CurrencyManager {
                     .find(|w| w.metadata.symbol == token.symbol_to_string())
                     .ok_or(CurrencyError::WalletNotSet)?;
                 Ok(wallet.metadata.fee)
+            }
+            Currency::TRC20USDT => {
+                // TRC-20 transfer fee is approximately 15-30 TRX (paid by user in TRX)
+                // Return estimate in smallest unit (sun: 1 TRX = 1,000,000 sun)
+                Ok(30_000_000) // 30 TRX
             }
         }
     }
