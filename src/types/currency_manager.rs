@@ -117,8 +117,13 @@ impl CurrencyManager {
     }
 
     /// Set TRC-20 USDT wallet configuration
-    pub fn set_trc20_wallet(&mut self, hot_wallet_address: String, is_testnet: bool, api_key: Option<String>) {
-        self.trc20_usdt = Some(TRC20USDTWallet::new(hot_wallet_address, is_testnet, api_key));
+    ///
+    /// # Parameters
+    /// * `is_testnet` - Whether to use Shasta testnet (true) or mainnet (false)
+    /// * `is_production` - Whether to use production ECDSA key (true) or test key (false)
+    /// * `api_key` - Optional TronGrid API key for higher rate limits
+    pub fn set_trc20_wallet(&mut self, is_testnet: bool, is_production: bool, api_key: Option<String>) {
+        self.trc20_usdt = Some(TRC20USDTWallet::new(is_testnet, is_production, api_key));
     }
 
     pub fn remove_currency(&mut self, currency: &Currency) {

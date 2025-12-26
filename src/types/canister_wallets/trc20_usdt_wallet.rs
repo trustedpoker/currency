@@ -12,25 +12,33 @@ use crate::{
 /// 
 /// This wallet manages TRC-20 USDT deposits and withdrawals.
 /// Unlike other wallets, it doesn't use ICRC-2 allowances.
-/// Instead, it uses:
-/// - On-demand deposit verification (user provides tx hash)
-/// - Direct withdrawal via HTTP outcalls to Tron network
+/// 
+/// **Architecture**: Each user gets a unique Tron address derived from
+/// their IC Principal using threshold ECDSA. This provides:
+/// - Better UX: Users send to their own address (no tx hash copy-paste)
+/// - Auto-detection: Backend checks each user's address for new deposits
+/// - Security: Private keys managed by IC threshold signatures
 #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
 pub struct TRC20USDTWallet {
-    /// Hot wallet address on Tron network
-    pub hot_wallet_address: String,
     /// Whether to use testnet (Shasta) or mainnet
     pub is_testnet: bool,
+    /// Whether to use production ECDSA key
+    pub is_production: bool,
     /// Optional TronGrid API key for higher rate limits
     pub api_key: Option<String>,
 }
 
 impl TRC20USDTWallet {
     /// Create a new TRC20USDTWallet
-    pub fn new(hot_wallet_address: String, is_testnet: bool, api_key: Option<String>) -> Self {
+    ///
+    /// # Parameters
+    /// * `is_testnet` - Whether to use Shasta testnet or mainnet
+    /// * `is_production` - Whether to use production ECDSA key
+    /// * `api_key` - Optional TronGrid API key for higher rate limits
+    pub fn new(is_testnet: bool, is_production: bool, api_key: Option<String>) -> Self {
         Self {
-            hot_wallet_address,
             is_testnet,
+            is_production,
             api_key,
         }
     }
@@ -77,19 +85,15 @@ impl TRC20USDTWallet {
             ));
         }
 
-        // Verify sender is the user's linked Tron address
-        if tx_info.from != user_tron_address {
+        // NEW WORKFLOW: In the updated system, users send USDT to their own generated address
+        // So we verify that the recipient (to) is the user's address
+        // The sender (from) can be any external wallet the user owns
+        
+        // Verify recipient is the user's generated Tron address
+        if tx_info.to != user_tron_address {
             return Err(CurrencyError::TransactionVerificationFailed(format!(
-                "Transaction sender {} does not match user's linked Tron address {}",
-                tx_info.from, user_tron_address
-            )));
-        }
-
-        // Verify recipient is our hot wallet
-        if tx_info.to != self.hot_wallet_address {
-            return Err(CurrencyError::TransactionVerificationFailed(format!(
-                "Transaction recipient {} does not match hot wallet {}",
-                tx_info.to, self.hot_wallet_address
+                "Transaction recipient {} does not match user's Tron address {}. Please send to your own address.",
+                tx_info.to, user_tron_address
             )));
         }
 
@@ -114,41 +118,113 @@ impl TRC20USDTWallet {
 
     /// Request a withdrawal
     /// 
-    /// This method creates and broadcasts a TRC-20 transfer transaction
-    /// to send USDT from the hot wallet to the user's Tron address.
+    /// Creates and signs a TRC-20 transfer transaction using IC threshold ECDSA,
+    /// then broadcasts it to the Tron network.
     /// 
-    /// Note: This is a simplified version for MVP. In production:
-    /// 1. Use threshold signatures for hot wallet key management
-    /// 2. Implement transaction batching
-    /// 3. Add withdrawal limits and rate limiting
+    /// # Parameters
+    /// * `user_principal` - The user's IC Principal (for signing)
+    /// * `to_address` - The recipient Tron address
+    /// * `amount` - Amount to withdraw (in smallest unit, 6 decimals)
+    ///
+    /// # Returns
+    /// * Transaction hash of the broadcasted withdrawal
+    ///
+    /// Note: For MVP, this returns an error. Full implementation requires:
+    /// 1. Transaction construction via TronGrid API
+    /// 2. Signing with threshold ECDSA
+    /// 3. Broadcasting to Tron network
     pub async fn request_withdrawal(
         &self,
+        user_principal: Principal,
         to_address: &str,
         _amount: u64,
     ) -> Result<String, CurrencyError> {
         // Validate recipient address
         crate::tron::utils::validate_tron_address(to_address)?;
 
-        // For MVP, we'll return an error indicating this needs to be implemented
-        // with proper key management
+        // For MVP, return error - full implementation needs:
+        // 1. Create unsigned transaction via TronGrid
+        // 2. Sign with threshold ECDSA
+        // 3. Broadcast signed transaction
+        let _ = user_principal; // Will be used for signing
+        
         Err(CurrencyError::OperationNotSupported(
-            "Withdrawal implementation pending: requires threshold signature setup".to_string(),
+            "Withdrawal implementation pending: transaction construction and broadcasting".to_string(),
         ))
 
-        // TODO: Full implementation steps:
-        // 1. Get hot wallet private key from threshold signature
-        // 2. Create TRC-20 transfer transaction
-        // 3. Sign transaction
-        // 4. Broadcast to Tron network
-        // 5. Return transaction hash
+        // TODO: Full implementation:
+        // let unsigned_tx = create_trc20_transfer_tx(from_address, to_address, amount).await?;
+        // let signature = sign_with_threshold_ecdsa(user_principal, &unsigned_tx.hash(), self.is_production).await?;
+        // let signed_tx = unsigned_tx.add_signature(signature);
+        // let tx_hash = self.get_client().broadcast_transaction(&signed_tx).await?;
+        // Ok(tx_hash)
     }
 
-    /// Get hot wallet balance
+    /// Get total balance across all user addresses (for solvency check)
     /// 
-    /// Used for solvency checks to ensure virtual balances are backed 1:1
-    pub async fn get_hot_wallet_balance(&self) -> Result<u64, CurrencyError> {
+    /// Note: This would need to query all user addresses, which is expensive.
+    /// Better approach: Track deposits/withdrawals and maintain running balance.
+    pub async fn get_total_balance(&self) -> Result<u64, CurrencyError> {
+        // For MVP, return placeholder
+        // In production: sum all user address balances or track deposits - withdrawals
+        Err(CurrencyError::OperationNotSupported(
+            "Total balance check not yet implemented. Use deposit/withdrawal tracking.".to_string(),
+        ))
+    }
+
+    /// Get recent TRC-20 transactions for a user's Tron address
+    /// 
+    /// This method fetches incoming TRC-20 USDT transactions to the user's address.
+    /// Used for auto-detecting deposits without requiring user to input tx hash.
+    /// 
+    /// # Parameters
+    /// * `user_tron_address` - The user's unique Tron address
+    /// * `limit` - Maximum number of transactions to fetch (default: 20)
+    /// 
+    /// # Returns
+    /// * Vector of TronTxInfo for incoming USDT transactions
+    pub async fn get_address_transactions(
+        &self,
+        user_tron_address: &str,
+        limit: Option<u32>,
+    ) -> Result<Vec<TronTxInfo>, CurrencyError> {
         let client = self.get_client();
-        client.get_account_balance(&self.hot_wallet_address).await
+        let transactions = client
+            .get_trc20_transactions(user_tron_address, limit.unwrap_or(20))
+            .await?;
+        
+        Ok(transactions)
+    }
+
+    /// Get TRC-20 USDT balance for an address
+    /// 
+    /// Queries the current TRC-20 USDT balance of a Tron address.
+    /// 
+    /// # Parameters
+    /// * `address` - The Tron address to check
+    /// 
+    /// # Returns
+    /// * Balance in smallest unit (6 decimals)
+    pub async fn get_address_balance(&self, address: &str) -> Result<u64, CurrencyError> {
+        let client = self.get_client();
+        client.get_trc20_balance(address).await
+    }
+
+    /// Generate a unique Tron address for a user
+    /// 
+    /// Uses IC threshold ECDSA to derive a deterministic address from user's Principal.
+    /// Each user gets a unique address that only the IC canister can sign for.
+    /// 
+    /// # Parameters
+    /// * `user_principal` - The user's IC Principal
+    /// 
+    /// # Returns
+    /// * `(tron_address, public_key)` - The derived address and public key
+    pub async fn generate_user_address(
+        &self,
+        user_principal: Principal,
+    ) -> Result<(String, Vec<u8>), CurrencyError> {
+        crate::tron::ecdsa::derive_tron_address_for_user(user_principal, self.is_production).await
     }
 }
 
@@ -224,23 +300,15 @@ mod tests {
 
     #[test]
     fn test_create_wallet() {
-        let wallet = TRC20USDTWallet::new(
-            "TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs".to_string(),
-            true,
-            None,
-        );
-        assert_eq!(wallet.hot_wallet_address, "TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs");
+        let wallet = TRC20USDTWallet::new(true, false, None);
         assert!(wallet.is_testnet);
+        assert!(!wallet.is_production);
         assert!(wallet.api_key.is_none());
     }
 
     #[test]
     fn test_get_client() {
-        let wallet = TRC20USDTWallet::new(
-            "TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs".to_string(),
-            true,
-            Some("test-key".to_string()),
-        );
+        let wallet = TRC20USDTWallet::new(true, false, Some("test-key".to_string()));
         let client = wallet.get_client();
         assert!(client.api_url.contains("shasta"));
         assert_eq!(client.api_key, Some("test-key".to_string()));

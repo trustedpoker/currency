@@ -1,5 +1,6 @@
 use bs58;
 use sha2::{Sha256, Digest};
+use sha3::{Keccak256, Digest as Keccak256Digest};
 use hex;
 
 use crate::currency_error::CurrencyError;
@@ -101,6 +102,58 @@ pub fn format_usdt_amount(amount: u64) -> String {
     let whole = amount / 1_000_000;
     let fraction = amount % 1_000_000;
     format!("{}.{:06}", whole, fraction)
+}
+
+/// Convert ECDSA public key (65 bytes, uncompressed) to Tron address
+///
+/// Process:
+/// 1. Take public key bytes (skip first byte if 0x04 prefix)
+/// 2. Keccak256 hash
+/// 3. Take last 20 bytes
+/// 4. Add 0x41 prefix (Tron mainnet)
+/// 5. Calculate checksum
+/// 6. Base58 encode
+pub fn public_key_to_tron_address(public_key: &[u8]) -> Result<String, CurrencyError> {
+    // Public key should be 64 or 65 bytes (uncompressed)
+    let key_bytes = if public_key.len() == 65 && public_key[0] == 0x04 {
+        &public_key[1..] // Skip 0x04 prefix
+    } else if public_key.len() == 64 {
+        public_key
+    } else {
+        return Err(CurrencyError::InvalidKey(format!(
+            "Invalid public key length: {} (expected 64 or 65)",
+            public_key.len()
+        )));
+    };
+
+    // Keccak256 hash of public key
+    let mut hasher = Keccak256::new();
+    hasher.update(key_bytes);
+    let hash = hasher.finalize();
+
+    // Take last 20 bytes
+    let address_bytes = &hash[hash.len() - 20..];
+
+    // Add Tron address prefix (0x41 for mainnet)
+    let mut full_address = vec![0x41];
+    full_address.extend_from_slice(address_bytes);
+
+    // Calculate checksum
+    let mut hasher = Sha256::new();
+    hasher.update(&full_address);
+    let hash1 = hasher.finalize();
+
+    let mut hasher = Sha256::new();
+    hasher.update(hash1);
+    let hash2 = hasher.finalize();
+
+    let checksum = &hash2[..4];
+
+    // Combine address + checksum
+    full_address.extend_from_slice(checksum);
+
+    // Base58 encode
+    Ok(bs58::encode(&full_address).into_string())
 }
 
 /// Parse amount from human-readable format to smallest unit
